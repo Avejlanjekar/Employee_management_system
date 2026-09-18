@@ -1,5 +1,6 @@
 pipeline{
     agent any
+
     environment{
         FRONTEND_IMAGE_DEV= 'avejlanjekar45/employee-management-frontend-dev'
         FRONTEND_IMAGE_QA= 'avejlanjekar45/employee-management-frontend-qa'
@@ -19,15 +20,22 @@ pipeline{
         PROD_DH_CREDENTIALS= 'dockerhub-credentials'
     }
 
+    parameters{
+        choice(
+            name: 'Environment'
+            choices: ["DEV","QA","UAT","PROD"]
+            description: "Enter Environment"
+        )
+    }
+
     stages{
 
-        stage('checkout'){
-            steps{
-                checkout scm
-            }
-        }
-
         stage("build & push"){
+            when {
+                expression{
+                    params.Environment == "DEV"
+                }
+            }
             steps{
                 script{
                     def backend= docker.build("${env.BACKEND_IMAGE_DEV}:${GIT_COMMIT}","./backend")
@@ -43,6 +51,11 @@ pipeline{
         }
 
         stage("promote image DEV to QA"){
+            when{
+                expression{
+                    params.Environment == "QA"
+                }
+            }
             steps{
                 script{
                     docker.withRegistry("${env.REGISTRY_URL}","${env.DEV_DH_CREDENTIALS}"){
@@ -62,6 +75,11 @@ pipeline{
         }
 
         stage("promote image QA to UAT"){
+            when {
+                expression{
+                    params.Environment == "UAT"
+                }
+            }
             steps{
                 script{
                     docker.withRegistry("${env.REGISTRY_URL}","${env.QA_DH_CREDENTIALS}"){
@@ -90,6 +108,11 @@ pipeline{
         
 
         stage("Promote image from UAT to PROD"){
+            when{
+                expression{
+                    params.Environment == "PROD"
+                }
+            }
             steps{
                 script{
                     docker.withRegistry("${env.REGISTRY_URL}","${env.UAT_DH_CREDENTIALS}"){
