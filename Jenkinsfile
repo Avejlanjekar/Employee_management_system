@@ -22,8 +22,8 @@ pipeline{
 
     parameters{
         choice(
-            name: 'Environment'
-            choices: ["DEV","QA","UAT","PROD"]
+            name: 'Environment',
+            choices: ["DEV","QA","UAT","PROD"],
             description: "Enter Environment"
         )
     }
@@ -104,7 +104,6 @@ pipeline{
                       ok: "Promote to PROD"
             }
         }
-
         
 
         stage("Promote image from UAT to PROD"){
