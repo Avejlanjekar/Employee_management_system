@@ -82,7 +82,7 @@ pipeline{
 
         stage("approval for prod"){
             steps{
-                input message: 'Promote the image from UAT to PROD?'
+                input message: 'Promote the image from UAT to PROD?',
                       ok: "Promote to PROD"
             }
         }
