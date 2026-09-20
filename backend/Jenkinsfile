@@ -2,10 +2,6 @@ pipeline{
     agent any
 
     environment{
-        FRONTEND_IMAGE_DEV= 'avejlanjekar45/employee-management-frontend-dev'
-        FRONTEND_IMAGE_QA= 'avejlanjekar45/employee-management-frontend-qa'
-        FRONTEND_IMAGE_UAT= 'avejlanjekar45/employee-management-frontend-uat'
-        FRONTEND_IMAGE_PROD='avejlanjekar45/employee-management-frontend-prod'
 
         BACKEND_IMAGE_DEV= 'avejlanjekar45/employee-management-backend-dev'
         BACKEND_IMAGE_QA= 'avejlanjekar45/employee-management-backend-qa'
@@ -23,7 +19,7 @@ pipeline{
     parameters{
         choice(
             name: 'Environment',
-            choices: ["DEV","QA","UAT","PROD"],
+            choices: ["dev","qa","uat","prod"],
             description: "Select deployment environment"
         )
     }
@@ -33,18 +29,26 @@ pipeline{
         stage("build & push"){
             when {
                 expression{
-                    params.Environment == "DEV"
+                    params.Environment == "dev"
                 }
             }
             steps{
                 script{
                     def backend= docker.build("${env.BACKEND_IMAGE_DEV}:${GIT_COMMIT}","./backend")
 
-                    def frontend= docker.build("${env.FRONTEND_IMAGE_DEV}:${GIT_COMMIT}","./frontend")
-
                     docker.withRegistry("${env.REGISTRY_URL}","${env.DEV_DH_CREDENTIALS}"){
                         backend.push()
-                        frontend.push()
+                    }
+
+                    withKubeConfig(credentialsId: 'eks-kubeconfig', namespace: 'employee-dev'){
+                        sh 'echo deploying to employee-dev namespace...'
+                        sh "sed -i -e 's/{{ENV}}/${params.Environment}/g' -e 's/{{COMMITID}}/${env.GIT_COMMIT}/g' kube/backend-deployment.yml "
+                        sh 'kubectl apply -f kube/configmap.yml'
+                        sh 'kubectl apply -f kube/db-secret.yml'
+                        sh 'kubectl apply -f kube/mysql-deployment.yml'
+                        sh 'kubectl apply -f kube/mysql-service.yml'
+                        sh 'kubectl apply -f kube/backend-deployment.yml'
+                        sh 'kubectl apply -f kube/backend-service.yml'
                     }
                 }
             }
@@ -53,22 +57,30 @@ pipeline{
         stage("promote image DEV to QA"){
             when{
                 expression{
-                    params.Environment == "QA"
+                    params.Environment == "qa"
                 }
             }
             steps{
                 script{
                     docker.withRegistry("${env.REGISTRY_URL}","${env.DEV_DH_CREDENTIALS}"){
                         docker.image("${env.BACKEND_IMAGE_DEV}:${GIT_COMMIT}").pull()
-                        docker.image("${env.FRONTEND_IMAGE_DEV}:${GIT_COMMIT}").pull()
                     }
 
                     sh "docker tag ${env.BACKEND_IMAGE_DEV}:${GIT_COMMIT} ${env.BACKEND_IMAGE_QA}:${GIT_COMMIT}"
-                    sh "docker tag ${env.FRONTEND_IMAGE_DEV}:${GIT_COMMIT} ${env.FRONTEND_IMAGE_QA}:${GIT_COMMIT}"
 
                     docker.withRegistry("${env.REGISTRY_URL}","${env.QA_DH_CREDENTIALS}"){
                         docker.image("${env.BACKEND_IMAGE_QA}:${GIT_COMMIT}").push()
-                        docker.image("${env.FRONTEND_IMAGE_QA}:${GIT_COMMIT}").push()
+                    }
+
+                    withKubeConfig(credentialsId: 'eks-kubeconfig', namespace: 'employee-qa'){
+                        sh 'echo deploying to employee-qa namespace...'
+                        sh "sed -i -e 's/{{ENV}}/${params.Environment}/g' -e 's/{{COMMITID}}/${env.GIT_COMMIT}/g' kube/backend-deployment.yml "
+                        sh 'kubectl apply -f kube/configmap.yml'
+                        sh 'kubectl apply -f kube/db-secret.yml'
+                        sh 'kubectl apply -f kube/mysql-deployment.yml'
+                        sh 'kubectl apply -f kube/mysql-service.yml'
+                        sh 'kubectl apply -f kube/backend-deployment.yml'
+                        sh 'kubectl apply -f kube/backend-service.yml'
                     }
                 }
             }
@@ -77,22 +89,30 @@ pipeline{
         stage("promote image QA to UAT"){
             when {
                 expression{
-                    params.Environment == "UAT"
+                    params.Environment == "uat"
                 }
             }
             steps{
                 script{
                     docker.withRegistry("${env.REGISTRY_URL}","${env.QA_DH_CREDENTIALS}"){
                         docker.image("${env.BACKEND_IMAGE_QA}:${GIT_COMMIT}").pull()
-                        docker.image("${env.FRONTEND_IMAGE_QA}:${GIT_COMMIT}").pull()
                     }
 
                     sh "docker tag ${env.BACKEND_IMAGE_QA}:${GIT_COMMIT} ${env.BACKEND_IMAGE_UAT}:${GIT_COMMIT}"
-                    sh "docker tag ${env.FRONTEND_IMAGE_QA}:${GIT_COMMIT} ${env.FRONTEND_IMAGE_UAT}:${GIT_COMMIT}"
 
                     docker.withRegistry("${env.REGISTRY_URL}","${env.UAT_DH_CREDENTIALS}"){
                         docker.image("${env.BACKEND_IMAGE_UAT}:${GIT_COMMIT}").push()
-                        docker.image("${env.FRONTEND_IMAGE_UAT}:${GIT_COMMIT}").push()
+                    }
+
+                    withKubeConfig(credentialsId: 'eks-kubeconfig', namespace: 'employee-uat'){
+                        sh 'echo deploying to employee-uat namespace...'
+                        sh "sed -i -e 's/{{ENV}}/${params.Environment}/g' -e 's/{{COMMITID}}/${env.GIT_COMMIT}/g' kube/backend-deployment.yml "
+                        sh 'kubectl apply -f kube/configmap.yml'
+                        sh 'kubectl apply -f kube/db-secret.yml'
+                        sh 'kubectl apply -f kube/mysql-deployment.yml'
+                        sh 'kubectl apply -f kube/mysql-service.yml'
+                        sh 'kubectl apply -f kube/backend-deployment.yml'
+                        sh 'kubectl apply -f kube/backend-service.yml'
                     }
                 }
             }
@@ -101,7 +121,7 @@ pipeline{
         stage("approval for prod"){
             when{
                 expression{
-                    params.Environment == 'PROD'
+                    params.Environment == 'prod'
                 }
             }
             steps{
@@ -114,22 +134,30 @@ pipeline{
         stage("Promote image from UAT to PROD"){
             when{
                 expression{
-                    params.Environment == "PROD"
+                    params.Environment == "prod"
                 }
             }
             steps{
                 script{
                     docker.withRegistry("${env.REGISTRY_URL}","${env.UAT_DH_CREDENTIALS}"){
                         docker.image("${env.BACKEND_IMAGE_UAT}:${GIT_COMMIT}").pull()
-                        docker.image("${env.FRONTEND_IMAGE_UAT}:${GIT_COMMIT}").pull()
                     }
 
                     sh "docker tag ${env.BACKEND_IMAGE_UAT}:${GIT_COMMIT} ${env.BACKEND_IMAGE_PROD}:${GIT_COMMIT}"
-                    sh "docker tag ${env.FRONTEND_IMAGE_UAT}:${GIT_COMMIT} ${env.FRONTEND_IMAGE_PROD}:${GIT_COMMIT}"
 
                     docker.withRegistry("${env.REGISTRY_URL}","${env.PROD_DH_CREDENTIALS}"){
                         docker.image("${env.BACKEND_IMAGE_PROD}:${GIT_COMMIT}").push()
-                        docker.image("${env.FRONTEND_IMAGE_PROD}:${GIT_COMMIT}").push()
+                    }
+
+                    withKubeConfig(credentialsId: 'eks-kubeconfig', namespace: 'employee-prod'){
+                        sh 'echo deploying to employee-prod namespace...'
+                        sh "sed -i -e 's/{{ENV}}/${params.Environment}/g' -e 's/{{COMMITID}}/${env.GIT_COMMIT}/g' kube/backend-deployment.yml "
+                        sh 'kubectl apply -f kube/configmap.yml'
+                        sh 'kubectl apply -f kube/db-secret.yml'
+                        sh 'kubectl apply -f kube/mysql-deployment.yml'
+                        sh 'kubectl apply -f kube/mysql-service.yml'
+                        sh 'kubectl apply -f kube/backend-deployment.yml'
+                        sh 'kubectl apply -f kube/backend-service.yml'
                     }
                 }
             }
