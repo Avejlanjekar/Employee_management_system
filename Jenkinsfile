@@ -24,7 +24,7 @@ pipeline{
         choice(
             name: 'Environment',
             choices: ["DEV","QA","UAT","PROD"],
-            description: "Enter Environment"
+            description: "Select deployment environment"
         )
     }
 
@@ -99,6 +99,11 @@ pipeline{
         }
 
         stage("approval for prod"){
+            when{
+                expression{
+                    params.Environment == 'PROD'
+                }
+            }
             steps{
                 input message: 'Promote the image from UAT to PROD?',
                       ok: "Promote to PROD"
